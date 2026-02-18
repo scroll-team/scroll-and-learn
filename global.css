@@ -1,0 +1,30 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+
+@import "nativewind/theme";
+
+/*
+ * LearnAnything Design Tokens
+ * Palette: "Ink & Amber"
+ *
+ * Primary:  Teal-600   #0D9488
+ * Dark:     Teal-900   #134E4A
+ * Accent:   Amber-500  #F59E0B
+ * Energy:   Orange-500 #F97316
+ * Success:  Green-500  #22C55E
+ * Error:    Red-500    #EF4444
+ */
+
+@theme {
+  --color-brand: #0D9488;
+  --color-brand-dark: #134E4A;
+  --color-brand-light: #CCFBF1;
+  --color-brand-50: #F0FDFA;
+
+  --color-reward: #F59E0B;
+  --color-reward-light: #FEF3C7;
+
+  --color-energy: #F97316;
+  --color-energy-light: #FFF7ED;
+}
