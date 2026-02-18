@@ -6,7 +6,7 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const { colorScheme } = useColorScheme();
   const colors = Colors[colorScheme ?? "light"];
 
   return (
@@ -46,6 +46,19 @@ export default function TabLayout() {
           title: "Profile",
           tabBarIcon: ({ color }) => (
             <IconSymbol size={24} name="person.fill" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="dev"
+        options={{
+          title: "Dev",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol
+              size={24}
+              name="chevron.left.forwardslash.chevron.right"
+              color={color}
+            />
           ),
         }}
       />
