@@ -25,6 +25,7 @@ import {
   uploadDocument,
   deleteDocument,
 } from "@/services/documents";
+import { processDocument } from "@/services/processing";
 import type { Document, DocumentStatus } from "@/types";
 
 const statusBadge: Record<
@@ -36,13 +37,6 @@ const statusBadge: Record<
   ready: { label: "Ready", variant: "success" },
   error: { label: "Error", variant: "error" },
 };
-
-function formatFileSize(bytes: number | null): string {
-  if (!bytes) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
@@ -58,6 +52,7 @@ export default function LibraryScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
 
   const loadDocuments = useCallback(async () => {
     if (!user) return;
@@ -95,6 +90,32 @@ export default function LibraryScreen() {
     }
   }
 
+  async function handleGenerate(doc: Document) {
+    setProcessingIds((prev) => new Set(prev).add(doc.id));
+    setDocuments((prev) =>
+      prev.map((d) => (d.id === doc.id ? { ...d, status: "processing" as const } : d)),
+    );
+
+    const { success, error } = await processDocument(doc);
+
+    if (success) {
+      setDocuments((prev) =>
+        prev.map((d) => (d.id === doc.id ? { ...d, status: "ready" as const } : d)),
+      );
+    } else {
+      setDocuments((prev) =>
+        prev.map((d) => (d.id === doc.id ? { ...d, status: "error" as const } : d)),
+      );
+      Alert.alert("Generation failed", error ?? "Something went wrong");
+    }
+
+    setProcessingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(doc.id);
+      return next;
+    });
+  }
+
   function handleDelete(doc: Document) {
     Alert.alert("Delete document", `Remove "${doc.title}"? This cannot be undone.`, [
       { text: "Cancel", style: "cancel" },
@@ -115,9 +136,12 @@ export default function LibraryScreen() {
 
   function renderDocument({ item }: { item: Document }) {
     const badge = statusBadge[item.status];
+    const isProcessing = processingIds.has(item.id);
+    const canGenerate = item.status === "uploaded" || item.status === "error";
+
     return (
       <PressableCard className="mb-3">
-        <View className="flex-row items-start justify-between">
+        <View className="flex-row items-start">
           <View className="mr-3 h-10 w-10 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950">
             <Typography variant="body" className="text-red-500">
               PDF
@@ -129,25 +153,44 @@ export default function LibraryScreen() {
             </Typography>
             <View className="mt-1 flex-row items-center gap-2">
               <Badge variant={badge.variant}>{badge.label}</Badge>
-              {item.pageCount && (
-                <Typography variant="caption">
-                  {item.pageCount} pages
-                </Typography>
-              )}
+              <Typography variant="caption">
+                {formatDate(item.createdAt)}
+              </Typography>
             </View>
           </View>
           <IconButton size="sm" onPress={() => handleDelete(item)}>
             <IconSymbol name="trash.fill" size={16} color={isDark ? "#EF4444" : "#DC2626"} />
           </IconButton>
         </View>
-        <View className="mt-2 flex-row items-center justify-between">
-          <Typography variant="caption">
-            {formatDate(item.createdAt)}
-          </Typography>
-          <Typography variant="caption">
-            {formatFileSize(item.fileSize)}
-          </Typography>
-        </View>
+
+        {canGenerate && (
+          <View className="mt-3">
+            <Button
+              size="sm"
+              loading={isProcessing}
+              onPress={() => handleGenerate(item)}
+            >
+              {item.status === "error" ? "Retry Generation" : "Generate Quiz"}
+            </Button>
+          </View>
+        )}
+
+        {item.status === "processing" && (
+          <View className="mt-3 flex-row items-center gap-2">
+            <ActivityIndicator size="small" color="#0D9488" />
+            <Typography variant="bodySmall" className="text-teal-600 dark:text-teal-400">
+              Generating quiz with AI…
+            </Typography>
+          </View>
+        )}
+
+        {item.status === "ready" && (
+          <View className="mt-3">
+            <Button size="sm" variant="secondary" onPress={() => {}}>
+              View Quiz
+            </Button>
+          </View>
+        )}
       </PressableCard>
     );
   }

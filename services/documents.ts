@@ -1,6 +1,15 @@
+import { File as ExpoFile, Directory, Paths } from "expo-file-system";
 import { supabase } from "@/lib/supabase";
 import type { Document } from "@/types";
 import * as DocumentPicker from "expo-document-picker";
+
+const PDF_CACHE_DIR_NAME = "pdf-cache";
+
+function getPdfCacheDir(): Directory {
+  const dir = new Directory(Paths.cache, PDF_CACHE_DIR_NAME);
+  dir.create({ idempotent: true });
+  return dir;
+}
 
 interface UploadResult {
   document: Document | null;
@@ -59,6 +68,20 @@ export async function uploadDocument(
     return { document: null, error: insertError.message };
   }
 
+  // Cache the PDF locally so quiz generation never needs to download.
+  // Uses native file I/O — reads the DocumentPicker cache file and copies
+  // it to a predictable path keyed by document ID.
+  try {
+    const cacheDir = getPdfCacheDir();
+    const sourceFile = new ExpoFile(file.uri);
+    if (sourceFile.exists && sourceFile.size > 0) {
+      const cachedFile = new ExpoFile(cacheDir, `${data.id}.pdf`);
+      cachedFile.write(await sourceFile.bytes());
+    }
+  } catch {
+    // Non-fatal — generation will ask user to re-upload if cache is missing
+  }
+
   return {
     document: mapRow(data),
     error: null,
@@ -98,6 +121,12 @@ export async function deleteDocument(
     .from("documents")
     .delete()
     .eq("id", documentId);
+
+  // Clean up local PDF cache
+  try {
+    const cached = new ExpoFile(getPdfCacheDir(), `${documentId}.pdf`);
+    if (cached.exists) cached.delete();
+  } catch {}
 
   return { error: dbError?.message ?? null };
 }
