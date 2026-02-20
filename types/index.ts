@@ -24,6 +24,7 @@ export interface Document {
   userId: string;
   title: string;
   filePath: string;
+  fileSize: number | null;
   status: DocumentStatus;
   pageCount: number | null;
   createdAt: string;

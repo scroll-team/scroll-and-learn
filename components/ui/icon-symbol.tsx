@@ -23,6 +23,10 @@ const MAPPING = {
   'person.fill': 'person',
   'eye.fill': 'visibility',
   'eye.slash.fill': 'visibility-off',
+  'trash.fill': 'delete',
+  'plus': 'add',
+  'doc.fill': 'description',
+  'arrow.up.doc.fill': 'upload-file',
 } as IconMapping;
 
 /**
