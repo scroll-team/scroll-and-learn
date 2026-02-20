@@ -13,13 +13,14 @@ import {
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
 import * as SplashScreen from "expo-splash-screen";
-import { Stack } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, type PropsWithChildren } from "react";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { palette } from "@/constants/theme";
+import { AuthProvider, useAuth } from "@/providers/auth-provider";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -49,9 +50,25 @@ const AppDarkTheme = {
   },
 };
 
-export const unstable_settings = {
-  anchor: "(tabs)",
-};
+function AuthGuard({ children }: PropsWithChildren) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === "(auth)";
+
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace("/(auth)/sign-in");
+    } else if (isAuthenticated && inAuthGroup) {
+      router.replace("/(tabs)");
+    }
+  }, [isAuthenticated, isLoading, segments]);
+
+  return <>{children}</>;
+}
 
 export default function RootLayout() {
   const { colorScheme } = useColorScheme();
@@ -76,14 +93,18 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={theme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="modal"
-          options={{ presentation: "modal", title: "Modal" }}
-        />
-      </Stack>
+      <AuthProvider>
+        <AuthGuard>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="modal"
+              options={{ presentation: "modal", title: "Modal" }}
+            />
+          </Stack>
+        </AuthGuard>
+      </AuthProvider>
       <StatusBar style="auto" />
     </ThemeProvider>
   );

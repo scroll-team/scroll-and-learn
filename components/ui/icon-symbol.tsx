@@ -21,6 +21,8 @@ const MAPPING = {
   'book.fill': 'menu-book',
   'flame.fill': 'local-fire-department',
   'person.fill': 'person',
+  'eye.fill': 'visibility',
+  'eye.slash.fill': 'visibility-off',
 } as IconMapping;
 
 /**

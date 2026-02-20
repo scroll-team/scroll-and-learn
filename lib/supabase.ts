@@ -1,13 +1,21 @@
-/**
- * Supabase client initialization.
- *
- * Will be configured in Step 3 (Auth) with:
- * - @supabase/supabase-js
- * - expo-secure-store for token persistence
- * - Environment variables for URL and anon key
- *
- * All database/storage/auth calls go through this single client instance.
- */
+import { createClient } from "@supabase/supabase-js";
+import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 
-// Placeholder -- implemented in Step 3
-export const supabase = null;
+const ExpoSecureStoreAdapter = {
+  getItem: (key: string) => SecureStore.getItemAsync(key),
+  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
+  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
+};
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: Platform.OS === "web" ? undefined : ExpoSecureStoreAdapter,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
