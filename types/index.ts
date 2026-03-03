@@ -15,6 +15,22 @@ export interface UserProfile {
   createdAt: string;
 }
 
+// ── Collections ─────────────────────────────────────────────────────────────
+
+export type CollectionStatus = "active" | "processing" | "ready" | "error";
+
+export interface Collection {
+  id: string;
+  userId: string;
+  title: string;
+  emoji: string;
+  status: CollectionStatus;
+  createdAt: string;
+  updatedAt: string;
+  /** Populated client-side when fetching collections with document count */
+  documentCount?: number;
+}
+
 // ── Documents ───────────────────────────────────────────────────────────────
 
 export type DocumentStatus = "uploaded" | "processing" | "ready" | "error";
@@ -22,12 +38,43 @@ export type DocumentStatus = "uploaded" | "processing" | "ready" | "error";
 export interface Document {
   id: string;
   userId: string;
+  collectionId: string | null;
   title: string;
   filePath: string;
   fileSize: number | null;
   status: DocumentStatus;
   pageCount: number | null;
   createdAt: string;
+}
+
+// ── Study Plans ──────────────────────────────────────────────────────────────
+
+export type StudyPlanStatus = "generating" | "ready" | "error";
+
+export interface StudyPlan {
+  id: string;
+  collectionId: string;
+  userId: string;
+  title: string;
+  description: string | null;
+  status: StudyPlanStatus;
+  createdAt: string;
+  /** Populated client-side */
+  lessons?: Lesson[];
+}
+
+// ── Lessons ──────────────────────────────────────────────────────────────────
+
+export interface Lesson {
+  id: string;
+  studyPlanId: string;
+  userId: string;
+  title: string;
+  summary: string | null;
+  orderIndex: number;
+  createdAt: string;
+  /** Populated client-side */
+  quiz?: Quiz;
 }
 
 // ── Quizzes ─────────────────────────────────────────────────────────────────
@@ -41,7 +88,8 @@ export interface QuizQuestion {
 
 export interface Quiz {
   id: string;
-  documentId: string;
+  documentId: string | null;
+  lessonId: string | null;
   title: string;
   questions: QuizQuestion[];
   difficulty: "easy" | "medium" | "hard";

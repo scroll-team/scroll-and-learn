@@ -32,6 +32,7 @@ export async function pickDocument() {
 export async function uploadDocument(
   userId: string,
   file: DocumentPicker.DocumentPickerAsset,
+  collectionId?: string,
 ): Promise<UploadResult> {
   const fileExt = "pdf";
   const fileName = `${userId}/${Date.now()}.${fileExt}`;
@@ -59,6 +60,7 @@ export async function uploadDocument(
       file_path: fileName,
       file_size: file.size ?? null,
       status: "uploaded",
+      collection_id: collectionId ?? null,
     })
     .select()
     .single();
@@ -105,6 +107,22 @@ export async function fetchDocuments(userId: string): Promise<{
   return { documents: (data ?? []).map(mapRow), error: null };
 }
 
+export async function fetchDocumentsForCollection(
+  collectionId: string,
+): Promise<{ documents: Document[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .eq("collection_id", collectionId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return { documents: [], error: error.message };
+  }
+
+  return { documents: (data ?? []).map(mapRow), error: null };
+}
+
 export async function deleteDocument(
   documentId: string,
   filePath: string,
@@ -135,6 +153,7 @@ function mapRow(row: any): Document {
   return {
     id: row.id,
     userId: row.user_id,
+    collectionId: row.collection_id ?? null,
     title: row.title,
     filePath: row.file_path,
     fileSize: row.file_size ?? null,

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { View, FlatList, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import {
   Typography,
   PressableCard,
@@ -12,67 +12,83 @@ import {
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useAuth } from "@/providers/auth-provider";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { fetchAllQuizzes } from "@/services/quiz";
-import type { Quiz } from "@/types";
+import { fetchAllStudyPlans } from "@/services/study-plan";
+import type { StudyPlan } from "@/types";
 
-type QuizWithDoc = Quiz & { documentTitle?: string };
+type EnrichedStudyPlan = StudyPlan & {
+  collectionTitle?: string;
+  collectionEmoji?: string;
+};
 
 export default function LearnScreen() {
   const { user } = useAuth();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
 
-  const [quizzes, setQuizzes] = useState<QuizWithDoc[]>([]);
+  const [studyPlans, setStudyPlans] = useState<EnrichedStudyPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const loadQuizzes = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!user) return;
-    const { quizzes: q } = await fetchAllQuizzes(user.id);
-    setQuizzes(q);
+    const { studyPlans: data } = await fetchAllStudyPlans(user.id);
+    setStudyPlans(data);
   }, [user]);
 
-  useEffect(() => {
-    loadQuizzes().finally(() => setIsLoading(false));
-  }, [loadQuizzes]);
+  useFocusEffect(
+    useCallback(() => {
+      setIsLoading(true);
+      load().finally(() => setIsLoading(false));
+    }, [load]),
+  );
 
   async function handleRefresh() {
     setIsRefreshing(true);
-    await loadQuizzes();
+    await load();
     setIsRefreshing(false);
   }
 
-  function renderQuiz({ item }: { item: QuizWithDoc }) {
+  function renderStudyPlan({ item }: { item: EnrichedStudyPlan }) {
     return (
       <PressableCard
         className="mb-3"
         onPress={() =>
           router.push({
-            pathname: "/quiz/[id]",
+            pathname: "/study-plan/[id]",
             params: { id: item.id },
           })
         }
       >
-        <View className="flex-row items-start">
-          <View className="mr-3 h-10 w-10 items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-900">
-            <IconSymbol name="flame.fill" size={20} color={isDark ? "#FCD34D" : "#D97706"} />
+        <View className="flex-row items-center">
+          <View className="mr-3 h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-950">
+            <Typography variant="h2">
+              {item.collectionEmoji ?? "📚"}
+            </Typography>
           </View>
           <View className="flex-1">
             <Typography variant="h3" numberOfLines={2}>
               {item.title}
             </Typography>
-            {item.documentTitle && (
-              <Typography variant="caption" className="mt-0.5" numberOfLines={1}>
-                From: {item.documentTitle}
+            {item.collectionTitle ? (
+              <Typography
+                variant="caption"
+                className="mt-0.5 text-stone-500 dark:text-stone-400"
+                numberOfLines={1}
+              >
+                {item.collectionTitle}
               </Typography>
-            )}
+            ) : null}
+            {item.description ? (
+              <Typography
+                variant="bodySmall"
+                numberOfLines={2}
+                className="mt-1 text-stone-500 dark:text-stone-400"
+              >
+                {item.description}
+              </Typography>
+            ) : null}
             <View className="mt-2 flex-row items-center gap-2">
-              <Badge variant="brand">
-                {item.questions.length} questions
-              </Badge>
-              <Badge variant="default">
-                {item.difficulty}
-              </Badge>
+              <Badge variant="success">Ready</Badge>
             </View>
           </View>
           <IconSymbol
@@ -87,11 +103,14 @@ export default function LearnScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? "#0C0A09" : "#FAFAF9" }} edges={["top"]}>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: isDark ? "#0C0A09" : "#FAFAF9" }}
+        edges={["top"]}
+      >
         <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
           <Typography variant="h1">Learn</Typography>
           <Typography variant="bodySmall" className="mt-1">
-            Your quizzes.
+            Your study plans.
           </Typography>
           <View className="mt-6 gap-3">
             <SkeletonCard />
@@ -103,31 +122,40 @@ export default function LearnScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? "#0C0A09" : "#FAFAF9" }} edges={["top"]}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: isDark ? "#0C0A09" : "#FAFAF9" }}
+      edges={["top"]}
+    >
       <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
         <Typography variant="h1">Learn</Typography>
         <Typography variant="bodySmall" className="mt-1">
-          {quizzes.length
-            ? `${quizzes.length} quiz${quizzes.length > 1 ? "zes" : ""} available`
-            : "Your quizzes."}
+          {studyPlans.length
+            ? `${studyPlans.length} study plan${studyPlans.length > 1 ? "s" : ""}`
+            : "Your study plans."}
         </Typography>
 
-        {quizzes.length === 0 ? (
+        {studyPlans.length === 0 ? (
           <View className="flex-1 items-center justify-center">
             <EmptyState
               icon={
                 <View className="h-16 w-16 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-900">
-                  <IconSymbol name="flame.fill" size={32} color={isDark ? "#FCD34D" : "#D97706"} />
+                  <IconSymbol
+                    name="flame.fill"
+                    size={32}
+                    color={isDark ? "#FCD34D" : "#D97706"}
+                  />
                 </View>
               }
-              title="No quizzes yet"
-              description="Upload a PDF in the Library tab and generate a quiz to start learning."
+              title="No study plans yet"
+              description="Create a collection in the Library tab, upload your PDFs, and generate a study plan."
+              actionLabel="Go to Library"
+              onAction={() => router.push("/(tabs)")}
             />
           </View>
         ) : (
           <FlatList
-            data={quizzes}
-            renderItem={renderQuiz}
+            data={studyPlans}
+            renderItem={renderStudyPlan}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}
             showsVerticalScrollIndicator={false}

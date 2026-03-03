@@ -38,6 +38,19 @@ export interface GenerateEmbeddingParams {
   text: string;
 }
 
+export interface StudyPlanLesson {
+  title: string;
+  summary: string;
+  orderIndex: number;
+  quiz: GenerateQuizResult;
+}
+
+export interface GenerateStudyPlanResult {
+  title: string;
+  description: string;
+  lessons: StudyPlanLesson[];
+}
+
 export interface AIProvider {
   readonly name: string;
 

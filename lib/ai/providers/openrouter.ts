@@ -6,11 +6,14 @@ import type {
   GenerateStoryCardsParams,
   GenerateStoryCardsResult,
   GenerateSummaryParams,
+  GenerateStudyPlanResult,
 } from "../types";
 
 const API_KEY = process.env.EXPO_PUBLIC_OPENROUTER_API_KEY!;
 const BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = "google/gemini-2.5-flash";
+//"anthropic/claude-sonnet-4.6";
+//"google/gemini-2.5-flash";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -67,12 +70,14 @@ export async function generateQuizFromPdfDataUrl(
   pdfDataUrl: string,
   numQuestions: number = 5,
   difficulty: "easy" | "medium" | "hard" = "medium",
+  language: "en" | "es" | "fr" | "de" | "it" | "pt" | "ru" | "zh" = "it",
 ): Promise<GenerateQuizResult> {
   const prompt = `You are an expert educator. Analyze this PDF document and generate a quiz to test comprehension.
 
 Requirements:
 - Generate exactly ${numQuestions} multiple-choice questions
 - Difficulty level: ${difficulty}
+- Language: ${language}
 - Each question should have exactly 4 options
 - Questions should cover the most important concepts in the document
 - Explanations should be concise but educational
@@ -115,6 +120,77 @@ You MUST respond with ONLY valid JSON in this exact structure, no other text:
 
   if (!result.title || !result.questions?.length) {
     throw new Error("Invalid quiz response from AI");
+  }
+
+  return result;
+}
+
+export async function generateStudyPlanFromPdfs(
+  pdfs: Array<{ documentId: string; filename: string; dataUrl: string }>,
+  collectionTitle: string,
+  numLessons: number = 5,
+  questionsPerLesson: number = 5,
+): Promise<GenerateStudyPlanResult> {
+  const prompt = `You are an expert curriculum designer. You have been given ${pdfs.length} PDF document(s) from a study collection called "${collectionTitle}".
+
+Your task is to analyze ALL the documents together and create a structured study plan that covers the material progressively, like a Duolingo course.
+
+Requirements:
+- Create exactly ${numLessons} lessons that logically build on each other
+- Each lesson should cover a distinct topic or concept from the material
+- Order lessons from foundational to advanced
+- For each lesson, generate exactly ${questionsPerLesson} multiple-choice questions
+- Questions must be grounded in the actual content of the documents
+- Write everything in the same language as the documents
+
+You MUST respond with ONLY valid JSON in this exact structure, no other text:
+{
+  "title": "Study plan title based on the collection topic",
+  "description": "2-3 sentence overview of what this study plan covers",
+  "lessons": [
+    {
+      "title": "Lesson title",
+      "summary": "2-3 sentence summary of what this lesson covers",
+      "orderIndex": 0,
+      "quiz": {
+        "title": "Quiz title for this lesson",
+        "questions": [
+          {
+            "question": "The question text",
+            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "correctAnswer": 0,
+            "explanation": "Brief explanation of why this answer is correct"
+          }
+        ]
+      }
+    }
+  ]
+}`;
+
+  const fileContentParts: ContentPart[] = pdfs.map((pdf) => ({
+    type: "file" as const,
+    file: {
+      filename: pdf.filename,
+      file_data: pdf.dataUrl,
+    },
+  }));
+
+  const text = await callOpenRouter(
+    [
+      {
+        role: "user",
+        content: [{ type: "text", text: prompt }, ...fileContentParts],
+      },
+    ],
+    DEFAULT_MODEL,
+    [{ id: "file-parser", pdf: { engine: "pdf-text" } }],
+  );
+
+  const jsonStr = extractJson(text);
+  const result = JSON.parse(jsonStr) as GenerateStudyPlanResult;
+
+  if (!result.title || !result.lessons?.length) {
+    throw new Error("Invalid study plan response from AI");
   }
 
   return result;
