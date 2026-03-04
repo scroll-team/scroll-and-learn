@@ -125,12 +125,37 @@ You MUST respond with ONLY valid JSON in this exact structure, no other text:
   return result;
 }
 
+export interface StudyPlanGenerationOptions {
+  language?: string;
+  difficulty?: "easy" | "medium" | "hard";
+  focus?: string;
+}
+
 export async function generateStudyPlanFromPdfs(
   pdfs: Array<{ documentId: string; filename: string; dataUrl: string }>,
   collectionTitle: string,
   numLessons: number = 5,
   questionsPerLesson: number = 5,
+  options: StudyPlanGenerationOptions = {},
 ): Promise<GenerateStudyPlanResult> {
+  const { language, difficulty = "medium", focus } = options;
+
+  const languageInstruction = language && language !== "auto"
+    ? `- Write EVERYTHING (titles, descriptions, questions, answers, explanations) in ${language}`
+    : "- Write everything in the same language as the documents";
+
+  const difficultyInstruction = `- Quiz difficulty: ${difficulty}. ${
+    difficulty === "easy"
+      ? "Questions should test basic recall and simple concepts."
+      : difficulty === "hard"
+        ? "Questions should challenge deep understanding, require analysis, and involve complex reasoning."
+        : "Questions should require understanding and application of concepts, not just memorization."
+  }`;
+
+  const focusInstruction = focus?.trim()
+    ? `- Special instructions from the student: "${focus.trim()}". Prioritize this guidance when selecting topics and writing questions.`
+    : "";
+
   const prompt = `You are an expert curriculum designer. You have been given ${pdfs.length} PDF document(s) from a study collection called "${collectionTitle}".
 
 Your task is to analyze ALL the documents together and create a structured study plan that covers the material progressively, like a Duolingo course.
@@ -141,7 +166,8 @@ Requirements:
 - Order lessons from foundational to advanced
 - For each lesson, generate exactly ${questionsPerLesson} multiple-choice questions
 - Questions must be grounded in the actual content of the documents
-- Write everything in the same language as the documents
+${languageInstruction}
+${difficultyInstruction}${focusInstruction ? `\n${focusInstruction}` : ""}
 
 You MUST respond with ONLY valid JSON in this exact structure, no other text:
 {

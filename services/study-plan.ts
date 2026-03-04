@@ -1,9 +1,14 @@
 import { File as ExpoFile, Directory, Paths } from "expo-file-system";
 import { supabase } from "@/lib/supabase";
-import { generateStudyPlanFromPdfs } from "@/lib/ai/providers/openrouter";
+import {
+  generateStudyPlanFromPdfs,
+  type StudyPlanGenerationOptions,
+} from "@/lib/ai/providers/openrouter";
 import { updateCollectionStatus } from "@/services/collections";
 import { fetchDocumentsForCollection } from "@/services/documents";
 import type { StudyPlan, Lesson, Quiz } from "@/types";
+
+export type { StudyPlanGenerationOptions };
 
 const PDF_CACHE_DIR_NAME = "pdf-cache";
 
@@ -21,6 +26,7 @@ export async function generateStudyPlan(
   collectionId: string,
   collectionTitle: string,
   userId: string,
+  options: StudyPlanGenerationOptions = {},
 ): Promise<GenerateResult> {
   try {
     await updateCollectionStatus(collectionId, "processing");
@@ -66,6 +72,7 @@ export async function generateStudyPlan(
       collectionTitle,
       numLessons,
       5,
+      options,
     );
 
     // 4. Insert study plan

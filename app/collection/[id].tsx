@@ -5,6 +5,12 @@ import {
   RefreshControl,
   Alert,
   ActivityIndicator,
+  Modal,
+  ScrollView,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
@@ -30,8 +36,270 @@ import {
 import {
   generateStudyPlan,
   fetchStudyPlanForCollection,
+  type StudyPlanGenerationOptions,
 } from "@/services/study-plan";
 import type { Collection, Document, StudyPlan, DocumentStatus } from "@/types";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type Difficulty = "easy" | "medium" | "hard";
+
+const LANGUAGES = [
+  { label: "Auto-detect", value: "auto" },
+  { label: "English", value: "English" },
+  { label: "Italian", value: "Italian" },
+  { label: "Spanish", value: "Spanish" },
+  { label: "French", value: "French" },
+  { label: "German", value: "German" },
+  { label: "Portuguese", value: "Portuguese" },
+];
+
+const DIFFICULTIES: { label: string; value: Difficulty; description: string }[] = [
+  { label: "Easy", value: "easy", description: "Basic recall" },
+  { label: "Medium", value: "medium", description: "Apply concepts" },
+  { label: "Hard", value: "hard", description: "Deep analysis" },
+];
+
+// ── StudyPlanOptionsModal ─────────────────────────────────────────────────────
+
+interface StudyPlanOptionsModalProps {
+  visible: boolean;
+  isDark: boolean;
+  onCancel: () => void;
+  onConfirm: (options: StudyPlanGenerationOptions) => void;
+}
+
+function StudyPlanOptionsModal({
+  visible,
+  isDark,
+  onCancel,
+  onConfirm,
+}: StudyPlanOptionsModalProps) {
+  const [language, setLanguage] = useState("auto");
+  const [difficulty, setDifficulty] = useState<Difficulty>("medium");
+  const [focus, setFocus] = useState("");
+
+  const bg = isDark ? "#1C1917" : "#FFFFFF";
+  const overlayBg = "rgba(0,0,0,0.6)";
+  const border = isDark ? "#44403C" : "#E7E5E4";
+  const mutedText = isDark ? "#A8A29E" : "#78716C";
+  const inputBg = isDark ? "#292524" : "#F5F5F4";
+  const inputBorder = isDark ? "#57534E" : "#D6D3D1";
+
+  function handleConfirm() {
+    onConfirm({
+      language: language === "auto" ? undefined : language,
+      difficulty,
+      focus: focus.trim() || undefined,
+    });
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onCancel}
+    >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: overlayBg, justifyContent: "flex-end" }}
+          onPress={onCancel}
+        >
+          <Pressable onPress={() => {}}>
+            <View
+              style={{
+                backgroundColor: bg,
+                borderTopLeftRadius: 24,
+                borderTopRightRadius: 24,
+                paddingTop: 12,
+                paddingBottom: Platform.OS === "ios" ? 36 : 24,
+                maxHeight: "90%",
+              }}
+            >
+              {/* Drag handle */}
+              <View
+                style={{
+                  width: 36,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: isDark ? "#57534E" : "#D6D3D1",
+                  alignSelf: "center",
+                  marginBottom: 20,
+                }}
+              />
+
+              <ScrollView
+                style={{ paddingHorizontal: 20 }}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* Title */}
+                <Typography variant="h2" style={{ marginBottom: 4 }}>
+                  Study Plan Settings
+                </Typography>
+                <Typography
+                  variant="bodySmall"
+                  style={{ color: mutedText, marginBottom: 24 }}
+                >
+                  Customise how the AI builds your study plan.
+                </Typography>
+
+                {/* ── Language ── */}
+                <Typography variant="h3" style={{ marginBottom: 10 }}>
+                  Language
+                </Typography>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginBottom: 24,
+                  }}
+                >
+                  {LANGUAGES.map((lang) => {
+                    const selected = language === lang.value;
+                    return (
+                      <Pressable
+                        key={lang.value}
+                        onPress={() => setLanguage(lang.value)}
+                        style={{
+                          paddingHorizontal: 14,
+                          paddingVertical: 7,
+                          borderRadius: 20,
+                          borderWidth: 1.5,
+                          borderColor: selected
+                            ? isDark ? "#5EEAD4" : "#0D9488"
+                            : border,
+                          backgroundColor: selected
+                            ? isDark ? "#134E4A" : "#CCFBF1"
+                            : "transparent",
+                        }}
+                      >
+                        <Typography
+                          variant="bodySmall"
+                          style={{
+                            color: selected
+                              ? isDark ? "#99F6E4" : "#0F766E"
+                              : mutedText,
+                            fontWeight: selected ? "600" : "400",
+                          }}
+                        >
+                          {lang.label}
+                        </Typography>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {/* ── Difficulty ── */}
+                <Typography variant="h3" style={{ marginBottom: 10 }}>
+                  Quiz Difficulty
+                </Typography>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: 8,
+                    marginBottom: 24,
+                  }}
+                >
+                  {DIFFICULTIES.map((d) => {
+                    const selected = difficulty === d.value;
+                    const colors = {
+                      easy: { active: "#16A34A", activeBg: isDark ? "#14532D" : "#DCFCE7", activeBorder: isDark ? "#16A34A" : "#86EFAC" },
+                      medium: { active: isDark ? "#5EEAD4" : "#0D9488", activeBg: isDark ? "#134E4A" : "#CCFBF1", activeBorder: isDark ? "#5EEAD4" : "#0D9488" },
+                      hard: { active: "#DC2626", activeBg: isDark ? "#7F1D1D" : "#FEE2E2", activeBorder: isDark ? "#DC2626" : "#FCA5A5" },
+                    }[d.value];
+                    return (
+                      <Pressable
+                        key={d.value}
+                        onPress={() => setDifficulty(d.value)}
+                        style={{
+                          flex: 1,
+                          alignItems: "center",
+                          paddingVertical: 10,
+                          borderRadius: 12,
+                          borderWidth: 1.5,
+                          borderColor: selected ? colors.activeBorder : border,
+                          backgroundColor: selected ? colors.activeBg : "transparent",
+                        }}
+                      >
+                        <Typography
+                          variant="body"
+                          style={{
+                            color: selected ? colors.active : mutedText,
+                            fontWeight: selected ? "600" : "400",
+                          }}
+                        >
+                          {d.label}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          style={{
+                            color: selected ? colors.active : mutedText,
+                            marginTop: 2,
+                            opacity: 0.8,
+                          }}
+                        >
+                          {d.description}
+                        </Typography>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {/* ── Focus ── */}
+                <Typography variant="h3" style={{ marginBottom: 4 }}>
+                  Focus
+                </Typography>
+                <Typography
+                  variant="caption"
+                  style={{ color: mutedText, marginBottom: 10 }}
+                >
+                  Tell the AI what to prioritise (optional)
+                </Typography>
+                <TextInput
+                  value={focus}
+                  onChangeText={setFocus}
+                  placeholder="e.g. Focus on the math part, or emphasise the theory"
+                  placeholderTextColor={mutedText}
+                  multiline
+                  numberOfLines={3}
+                  style={{
+                    backgroundColor: inputBg,
+                    borderWidth: 1,
+                    borderColor: inputBorder,
+                    borderRadius: 12,
+                    paddingHorizontal: 14,
+                    paddingTop: 12,
+                    paddingBottom: 12,
+                    color: isDark ? "#FAFAF9" : "#1C1917",
+                    fontSize: 15,
+                    lineHeight: 22,
+                    minHeight: 80,
+                    textAlignVertical: "top",
+                    marginBottom: 28,
+                  }}
+                />
+
+                {/* ── Actions ── */}
+                <View style={{ gap: 10, marginBottom: 8 }}>
+                  <Button onPress={handleConfirm}>Generate Study Plan</Button>
+                  <Button variant="ghost" onPress={onCancel}>
+                    Cancel
+                  </Button>
+                </View>
+              </ScrollView>
+            </View>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
 
 const statusBadge: Record<
   DocumentStatus,
@@ -63,6 +331,7 @@ export default function CollectionDetailScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -109,13 +378,18 @@ export default function CollectionDetailScreen() {
     }
   }
 
-  async function handleGeneratePlan() {
+  function handleGeneratePlan() {
     if (!user || !id || !collection) return;
     if (documents.length === 0) {
       Alert.alert("No files", "Upload at least one PDF before generating a study plan.");
       return;
     }
+    setShowOptionsModal(true);
+  }
 
+  async function handleConfirmGenerate(options: StudyPlanGenerationOptions) {
+    if (!user || !id || !collection) return;
+    setShowOptionsModal(false);
     setIsGenerating(true);
     setCollection((prev) => (prev ? { ...prev, status: "processing" } : prev));
 
@@ -123,6 +397,7 @@ export default function CollectionDetailScreen() {
       id,
       collection.title,
       user.id,
+      options,
     );
 
     if (success && studyPlanId) {
@@ -224,6 +499,12 @@ export default function CollectionDetailScreen() {
       style={{ flex: 1, backgroundColor: isDark ? "#0C0A09" : "#FAFAF9" }}
       edges={["top"]}
     >
+      <StudyPlanOptionsModal
+        visible={showOptionsModal}
+        isDark={isDark}
+        onCancel={() => setShowOptionsModal(false)}
+        onConfirm={handleConfirmGenerate}
+      />
       <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
         {/* Header */}
         <View className="mb-5 flex-row items-center">
