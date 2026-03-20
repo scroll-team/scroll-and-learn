@@ -16,6 +16,32 @@ import {
 } from "@/lib/ai/pipeline";
 import type { StudyPlan, Lesson, Quiz, PipelineStep } from "@/types";
 
+// ── Save helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Retries a Supabase write up to 3 times with exponential back-off.
+ * Handles transient "Network request failed" errors that occur after
+ * long-running AI pipelines (20-30 min) where the connection may have dropped.
+ */
+async function saveWithRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxAttempts = 3,
+): Promise<T> {
+  const delays = [2000, 5000, 10000];
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isLast = attempt === maxAttempts - 1;
+      if (isLast) throw new Error(`Failed to save ${label}: ${(err as Error).message}`);
+      console.warn(`Save attempt ${attempt + 1} failed for ${label}, retrying in ${delays[attempt]}ms...`);
+      await new Promise((r) => setTimeout(r, delays[attempt]));
+    }
+  }
+  throw new Error(`Failed to save ${label} after ${maxAttempts} attempts`);
+}
+
 export interface StudyPlanGenerationOptions {
   language?: string;
   difficulty?: "easy" | "medium" | "hard";
@@ -162,35 +188,42 @@ export async function generateStudyPlan(
       }
     }
 
-    // ── Step 7: Save lessons and quizzes ──────────────────────────────────
+    // ── Step 7: Refresh session + save lessons and quizzes ───────────────
     await updateStep("saving");
 
+    // Refresh the auth token — the pipeline can take 20-30 min and the
+    // underlying connection may have timed out by the time we reach saving.
+    await supabase.auth.refreshSession();
+
     for (const lc of lessonContents) {
-      const { data: lessonRow, error: lessonErr } = await supabase
-        .from("lessons")
-        .insert({
-          study_plan_id: studyPlanId,
+      const lessonRow = await saveWithRetry(async () => {
+        const { data, error } = await supabase
+          .from("lessons")
+          .insert({
+            study_plan_id: studyPlanId,
+            user_id: userId,
+            title: lc.lessonTitle,
+            summary: lc.summary,
+            order_index: lc.orderIndex,
+            slideshow_cards: lc.slideshowCards,
+            story_cards: lc.storyCards,
+          })
+          .select()
+          .single();
+        if (error) throw new Error(error.message);
+        return data;
+      }, `lesson "${lc.lessonTitle}"`);
+
+      await saveWithRetry(async () => {
+        const { error } = await supabase.from("quizzes").insert({
+          lesson_id: lessonRow.id,
           user_id: userId,
-          title: lc.lessonTitle,
-          summary: lc.summary,
-          order_index: lc.orderIndex,
-          slideshow_cards: lc.slideshowCards,
-          story_cards: lc.storyCards,
-        })
-        .select()
-        .single();
-
-      if (lessonErr) throw new Error(`Failed to save lesson: ${lessonErr.message}`);
-
-      const { error: quizErr } = await supabase.from("quizzes").insert({
-        lesson_id: lessonRow.id,
-        user_id: userId,
-        title: lc.quiz.title,
-        questions: lc.quiz.questions,
-        difficulty: options.difficulty ?? "medium",
-      });
-
-      if (quizErr) throw new Error(`Failed to save quiz: ${quizErr.message}`);
+          title: lc.quiz.title,
+          questions: lc.quiz.questions,
+          difficulty: options.difficulty ?? "medium",
+        });
+        if (error) throw new Error(error.message);
+      }, `quiz for "${lc.lessonTitle}"`);
     }
 
     // ── Step 8: Mark complete ─────────────────────────────────────────────
