@@ -34,6 +34,7 @@ export default function StudyPlanScreen() {
           title: planRes.data.title,
           description: planRes.data.description ?? null,
           status: planRes.data.status,
+          pipelineStep: planRes.data.pipeline_step ?? null,
           createdAt: planRes.data.created_at,
         });
       }

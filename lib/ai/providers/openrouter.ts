@@ -24,7 +24,7 @@ type ContentPart =
   | { type: "text"; text: string }
   | { type: "file"; file: { filename: string; file_data: string } };
 
-async function callOpenRouter(
+export async function callOpenRouter(
   messages: ChatMessage[],
   model: string = DEFAULT_MODEL,
   plugins?: any[],
@@ -64,6 +64,69 @@ function extractJson(text: string): string {
   const braceMatch = text.match(/\{[\s\S]*\}/);
   if (braceMatch) return braceMatch[0];
   return text;
+}
+
+export async function extractTextFromPdf(
+  pdfDataUrl: string,
+  docTitle: string,
+): Promise<{ extractedText: string; outline: any }> {
+  const prompt = `You are a document text extractor. Extract the full text from this PDF.
+
+RULES:
+- Extract ONLY what is written in the document
+- Do NOT add outside knowledge
+- Do NOT summarize — preserve the full content
+- You MUST respond with ONLY valid JSON, no other text before or after
+
+JSON structure (required):
+{
+  "extractedText": "The full text content of the document",
+  "outline": {
+    "mainSubject": "The primary subject of the document",
+    "totalPages": null,
+    "topics": [
+      {
+        "title": "Section title",
+        "startSection": "First few words of this section",
+        "endSection": "First few words of where this section ends",
+        "summary": "1-2 sentence summary from the document only"
+      }
+    ]
+  }
+}`;
+
+  const rawText = await callOpenRouter(
+    [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          {
+            type: "file",
+            file: { filename: `${docTitle}.pdf`, file_data: pdfDataUrl },
+          },
+        ],
+      },
+    ],
+    DEFAULT_MODEL,
+    [{ id: "file-parser", pdf: { engine: "pdf-text" } }],
+  );
+
+  // Try to parse as JSON; fall back to using raw text as extractedText
+  try {
+    const parsed = JSON.parse(extractJson(rawText));
+    return {
+      extractedText: parsed.extractedText ?? rawText,
+      outline: parsed.outline ?? { topics: [], totalPages: null, mainSubject: docTitle },
+    };
+  } catch {
+    // Model returned plain text instead of JSON — use it directly as the extracted text
+    console.warn(`extractTextFromPdf: JSON parse failed for "${docTitle}", using raw text`);
+    return {
+      extractedText: rawText,
+      outline: { topics: [], totalPages: null, mainSubject: docTitle },
+    };
+  }
 }
 
 export async function generateQuizFromPdfDataUrl(

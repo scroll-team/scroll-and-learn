@@ -51,6 +51,16 @@ export interface Document {
 
 export type StudyPlanStatus = "generating" | "ready" | "error";
 
+export type PipelineStep =
+  | "extracting"
+  | "planning"
+  | "creating"
+  | "reviewing"
+  | "retrying"
+  | "saving"
+  | "ready"
+  | "error";
+
 export interface StudyPlan {
   id: string;
   collectionId: string;
@@ -58,12 +68,28 @@ export interface StudyPlan {
   title: string;
   description: string | null;
   status: StudyPlanStatus;
+  pipelineStep: PipelineStep | null;
   createdAt: string;
   /** Populated client-side */
   lessons?: Lesson[];
 }
 
 // ── Lessons ──────────────────────────────────────────────────────────────────
+
+export interface SlideshowSlide {
+  title: string;
+  body: string;
+  keyPoints: string[];
+  example?: string;
+  order: number;
+}
+
+export interface StoryCardItem {
+  headline: string;
+  body: string;
+  emoji: string;
+  order: number;
+}
 
 export interface Lesson {
   id: string;
@@ -72,6 +98,8 @@ export interface Lesson {
   title: string;
   summary: string | null;
   orderIndex: number;
+  slideshowCards: SlideshowSlide[];
+  storyCards: StoryCardItem[];
   createdAt: string;
   /** Populated client-side */
   quiz?: Quiz;

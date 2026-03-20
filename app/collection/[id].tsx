@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   FlatList,
@@ -36,9 +36,10 @@ import {
 import {
   generateStudyPlan,
   fetchStudyPlanForCollection,
+  pollPipelineStep,
   type StudyPlanGenerationOptions,
 } from "@/services/study-plan";
-import type { Collection, Document, StudyPlan, DocumentStatus } from "@/types";
+import type { Collection, Document, StudyPlan, DocumentStatus, PipelineStep } from "@/types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -301,6 +302,74 @@ function StudyPlanOptionsModal({
   );
 }
 
+// ── Pipeline Progress Indicator ───────────────────────────────────────────────
+
+const PIPELINE_STEPS: { key: PipelineStep; label: string; icon: string }[] = [
+  { key: "extracting", label: "Reading PDFs", icon: "📄" },
+  { key: "planning", label: "Designing curriculum", icon: "🏗️" },
+  { key: "creating", label: "Creating content", icon: "✍️" },
+  { key: "reviewing", label: "Quality review", icon: "🔍" },
+  { key: "retrying", label: "Fixing issues", icon: "🔄" },
+  { key: "saving", label: "Saving results", icon: "💾" },
+];
+
+function PipelineProgress({ step, isDark }: { step: PipelineStep | null; isDark: boolean }) {
+  const activeColor = isDark ? "#5EEAD4" : "#0D9488";
+  const doneColor = isDark ? "#5EEAD4" : "#0D9488";
+  const pendingColor = isDark ? "#57534E" : "#D6D3D1";
+  const activeTextColor = isDark ? "#CCFBF1" : "#0F766E";
+  const pendingTextColor = isDark ? "#78716C" : "#A8A29E";
+
+  const currentIdx = step ? PIPELINE_STEPS.findIndex((s) => s.key === step) : -1;
+  const visibleSteps = PIPELINE_STEPS.filter((s) => s.key !== "retrying" || step === "retrying");
+
+  return (
+    <View style={{ gap: 6 }}>
+      {visibleSteps.map((s) => {
+        const idx = PIPELINE_STEPS.findIndex((ps) => ps.key === s.key);
+        const isDone = idx < currentIdx;
+        const isActive = idx === currentIdx;
+        const dotColor = isDone ? doneColor : isActive ? activeColor : pendingColor;
+        const textColor = isDone || isActive ? activeTextColor : pendingTextColor;
+
+        return (
+          <View key={s.key} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <View
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 11,
+                backgroundColor: isDone ? dotColor : "transparent",
+                borderWidth: 2,
+                borderColor: dotColor,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {isDone ? (
+                <Typography variant="caption" style={{ color: isDark ? "#0C0A09" : "#FFFFFF", fontSize: 11 }}>
+                  ✓
+                </Typography>
+              ) : isActive ? (
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor }} />
+              ) : null}
+            </View>
+            <Typography
+              variant="bodySmall"
+              style={{
+                color: textColor,
+                fontWeight: isActive ? "600" : "400",
+              }}
+            >
+              {s.icon} {s.label}{isActive ? "…" : ""}
+            </Typography>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 const statusBadge: Record<
   DocumentStatus,
   { label: string; variant: "default" | "success" | "warning" | "error" | "brand" }
@@ -332,6 +401,8 @@ export default function CollectionDetailScreen() {
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [pipelineStep, setPipelineStep] = useState<PipelineStep | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -387,24 +458,48 @@ export default function CollectionDetailScreen() {
     setShowOptionsModal(true);
   }
 
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  useEffect(() => () => stopPolling(), []);
+
   async function handleConfirmGenerate(options: StudyPlanGenerationOptions) {
     if (!user || !id || !collection) return;
     setShowOptionsModal(false);
     setIsGenerating(true);
+    setPipelineStep("extracting");
     setCollection((prev) => (prev ? { ...prev, status: "processing" } : prev));
+
+    // Start polling for pipeline progress
+    pollRef.current = setInterval(async () => {
+      const { step, status } = await pollPipelineStep(id);
+      if (step) setPipelineStep(step);
+      if (status === "ready" || status === "error") {
+        stopPolling();
+      }
+    }, 3000);
 
     const { success, studyPlanId, error } = await generateStudyPlan(
       id,
       collection.title,
       user.id,
       options,
+      (step) => setPipelineStep(step),
     );
 
+    stopPolling();
+
     if (success && studyPlanId) {
+      setPipelineStep("ready");
       setCollection((prev) => (prev ? { ...prev, status: "ready" } : prev));
       const { studyPlan: freshPlan } = await fetchStudyPlanForCollection(id);
       if (freshPlan) setStudyPlan(freshPlan);
     } else {
+      setPipelineStep("error");
       setCollection((prev) => (prev ? { ...prev, status: "error" } : prev));
       Alert.alert("Generation failed", error ?? "Something went wrong");
     }
@@ -533,22 +628,17 @@ export default function CollectionDetailScreen() {
           className="mb-5 rounded-2xl border border-teal-200 bg-teal-50 p-4 dark:border-teal-800 dark:bg-teal-950"
         >
           {isProcessing ? (
-            <View className="flex-row items-center gap-3">
-              <ActivityIndicator size="small" color="#0D9488" />
-              <View className="flex-1">
+            <View>
+              <View className="mb-3 flex-row items-center gap-3">
+                <ActivityIndicator size="small" color="#0D9488" />
                 <Typography
                   variant="h3"
                   className="text-teal-800 dark:text-teal-200"
                 >
                   Generating Study Plan…
                 </Typography>
-                <Typography
-                  variant="bodySmall"
-                  className="mt-0.5 text-teal-600 dark:text-teal-400"
-                >
-                  The AI is reading your files and building lessons.
-                </Typography>
               </View>
+              <PipelineProgress step={pipelineStep} isDark={isDark} />
             </View>
           ) : hasReadyPlan ? (
             <View>
